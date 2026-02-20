@@ -14,18 +14,31 @@ static const int pixelsize = 10;
 #include <string>
 int MOUSE_X = 0;
 int MOUSE_Y= 0;
+float sensitivity = 0.01;
+float mdx;
+float mdy;
+float yaw;
+float pitch;
 // 32-bit pixels: 0x00RRGGBB (we'll write as RRGGBB and let GDI interpret it)
 static uint32_t gPixels[WIDTH * HEIGHT];
 static BITMAPINFO gBmi;
+
 struct Vertex{
     float x,y,z;
 };
+
 struct Face{
     Vertex v0,v1,v2;
 };
 struct screenPoint{
     float x,y;
 };
+struct camPos{
+    float x = 0;
+    float y = 0;
+    float z = 0;
+};
+camPos cameraPosition;
 
 std::vector<Face> Faces;
 
@@ -86,10 +99,10 @@ void drawEdge(screenPoint a, screenPoint b)
     }
 }
 
-void fillPixel(screenPoint sp,int z)
+void fillPixel(screenPoint sp,float z)
 {
-    int size = 35 / z;
-    int half = size / 2;
+    float size = 35 / z;
+    float half = size / 2;
 
     int cx = (int)sp.x;
     int cy = (int)sp.y;
@@ -124,6 +137,27 @@ void clear(){
     }
 }
 
+// yaw = rotate around Y axis (left/right)
+// pitch = rotate around X axis (up/down)
+Vertex rotateVertex(const Vertex& v)
+{
+    float cy = cosf(yaw),  sy = sinf(yaw);
+    float cp = cosf(pitch), sp = sinf(pitch);
+
+    // 1) Yaw (Y-axis)
+    float x1 = v.x * cy + v.z * sy;
+    float y1 = v.y;
+    float z1 = -v.x * sy + v.z * cy;
+
+    // 2) Pitch (X-axis)
+    Vertex out;
+    out.x = x1;
+    out.y = y1 * cp - z1 * sp;
+    out.z = y1 * sp + z1 * cp;
+
+    return out;
+}
+
 screenPoint RenderVertex(Vertex vert)
 {
     screenPoint sp = projectToPixels(vert);
@@ -138,17 +172,29 @@ static void RenderFace()
         screenPoint sp0;
         screenPoint sp1;
         screenPoint sp2;
-        if(Faces[i].v0.z > 0){
-            sp0 = RenderVertex(Faces[i].v0);
+        Vertex rdx0 = rotateVertex(Faces[i].v0);
+        Vertex rdx1 = rotateVertex(Faces[i].v1);
+        Vertex rdx2 = rotateVertex(Faces[i].v2);
+        rdx0.x -= cameraPosition.x;
+        rdx0.y -= cameraPosition.y;
+        rdx0.z -= cameraPosition.z;
+        rdx1.x -= cameraPosition.x;
+        rdx1.y -= cameraPosition.y;
+        rdx1.z -= cameraPosition.z;
+        rdx2.x -= cameraPosition.x;
+        rdx2.y -= cameraPosition.y;
+        rdx2.z -= cameraPosition.z;
+        if(rdx0.z > 0.5){
+            sp0 = RenderVertex(rdx0);
         }
-        if(Faces[i].v1.z > 0){
-            sp1 = RenderVertex(Faces[i].v1);
+        if(rdx1.z > 0.5){
+            sp1 = RenderVertex(rdx1);
         }
-        if(Faces[i].v2.z > 0){
-            sp2 = RenderVertex(Faces[i].v2);
+        if(rdx2.z > 0.5){
+            sp2 = RenderVertex(rdx2);
         }
         
-        if(Faces[i].v0.z > 0 && Faces[i].v1.z > 0 && Faces[i].v2.z > 0){
+        if(rdx0.z > 0.5 && rdx1.z > 0.5 && rdx2.z > 0.5){
             drawEdge(sp0,sp1);
             drawEdge(sp1,sp2);
             drawEdge(sp2,sp0);
@@ -257,17 +303,56 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 RenderPattern();
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
+            if (wParam == 'W')
+            {
+                cameraPosition.x +=0.1;
+                RenderPattern();
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            if (wParam == 'S')
+            {
+                cameraPosition.x -=0.1;
+                RenderPattern();
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            if (wParam == 'D')
+            {
+                cameraPosition.y +=0.1;
+                RenderPattern();
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            if (wParam == 'A')
+            {
+                cameraPosition.y -=0.1;
+                RenderPattern();
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            if (wParam == VK_SPACE)
+            {
+                cameraPosition.z +=0.1;
+                RenderPattern();
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            if (wParam == VK_SHIFT)
+            {
+                cameraPosition.z -=0.1;
+                RenderPattern();
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
             return 0;
         }
         case WM_MOUSEMOVE:
         {
+            mdx = GET_X_LPARAM(lParam) - MOUSE_X;
+            mdy = GET_Y_LPARAM(lParam) - MOUSE_Y;
+            yaw   += mdx * sensitivity;
+            pitch += mdy * sensitivity;
             MOUSE_X = GET_X_LPARAM(lParam);
             MOUSE_Y = GET_Y_LPARAM(lParam);
-
             // x and y are in client-area pixel coordinates
             // top-left = (0,0)
 
-
+            InvalidateRect(hwnd, nullptr, FALSE);
 
             return 0;
         }
