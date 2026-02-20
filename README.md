@@ -11,7 +11,7 @@ Mouse — Look around
 
 Space / Shift — Move up / down
 
-E / R — Adjust depth
+E — Change Vertex mode
 
 # Load Custom Models
 
